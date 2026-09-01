@@ -20,30 +20,15 @@ class HoldingsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "show uses current market price for market value" do
-    security = Security.create!(
+    holding = create_manual_holding(
       ticker: "WBIT.HM",
-      name: "WisdomTree Bitcoin",
-      offline: false
-    )
-    account = users(:family_admin).family.accounts.create!(
-      name: "Manual Brokerage",
-      balance: 13676.39,
-      cash_balance: 0,
-      currency: "EUR",
-      accountable: Investment.new
-    )
-    holding = account.holdings.create!(
-      security: security,
-      date: Date.current,
       qty: 931,
       price: 14.69,
       amount: 13676.39,
-      currency: "EUR",
-      cost_basis: 14.69,
-      cost_basis_source: "calculated"
+      currency: "EUR"
     )
     Security::Price.create!(
-      security: security,
+      security: holding.security,
       date: Date.current,
       price: 16.21,
       currency: "EUR"
@@ -53,6 +38,49 @@ class HoldingsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, ApplicationController.helpers.format_money(Money.new(15091.51, "EUR"))
+  end
+
+  test "show falls back to stored holding amount when current market price is unknown" do
+    holding = create_manual_holding(
+      ticker: "WBIT-FALLBACK.HM",
+      qty: 931,
+      price: 14.69,
+      amount: 13676.39,
+      currency: "EUR",
+      offline: true
+    )
+
+    get holding_path(holding)
+
+    assert_response :success
+    assert_includes response.body, ApplicationController.helpers.format_money(Money.new(13676.39, "EUR"))
+  end
+
+  test "show converts current market price into holding currency for market value" do
+    holding = create_manual_holding(
+      ticker: "WBIT-USD.HM",
+      qty: 100,
+      price: 14.00,
+      amount: 1400.00,
+      currency: "EUR"
+    )
+    ExchangeRate.create!(
+      from_currency: "USD",
+      to_currency: "EUR",
+      date: Date.current,
+      rate: 0.9
+    )
+    Security::Price.create!(
+      security: holding.security,
+      date: Date.current,
+      price: 20.00,
+      currency: "USD"
+    )
+
+    get holding_path(holding)
+
+    assert_response :success
+    assert_includes response.body, ApplicationController.helpers.format_money(Money.new(1800.00, "EUR"))
   end
 
   test "destroys holding and associated entries" do
@@ -155,4 +183,30 @@ class HoldingsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to account_path(@holding.account, tab: "holdings")
     assert_equal "Yahoo Finance rate limit exceeded", flash[:alert]
   end
+
+  private
+    def create_manual_holding(ticker:, qty:, price:, amount:, currency:, offline: false)
+      security = Security.create!(
+        ticker: ticker,
+        name: "Manual Holding #{ticker}",
+        offline: offline
+      )
+      account = users(:family_admin).family.accounts.create!(
+        name: "Manual Brokerage #{ticker}",
+        balance: amount,
+        cash_balance: 0,
+        currency: currency,
+        accountable: Investment.new
+      )
+      account.holdings.create!(
+        security: security,
+        date: Date.current,
+        qty: qty,
+        price: price,
+        amount: amount,
+        currency: currency,
+        cost_basis: price,
+        cost_basis_source: "calculated"
+      )
+    end
 end
