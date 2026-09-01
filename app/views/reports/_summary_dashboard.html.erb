@@ -1,4 +1,4 @@
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
   <%# Total Income Card %>
   <div class="bg-container rounded-xl shadow-border-xs p-6">
     <div class="flex items-start justify-between mb-3">
@@ -67,6 +67,47 @@
           <% end %>
           <span class="text-sm text-subdued">
             <%= t("reports.summary.vs_previous") %>
+          </span>
+        </div>
+      <% end %>
+    </div>
+  </div>
+
+  <%# Recurring Gross Burn Card %>
+  <div class="bg-container rounded-xl shadow-border-xs p-6">
+    <div class="flex items-start justify-between mb-3">
+      <div class="flex items-center gap-2">
+        <%= icon("flame", size: "sm") %>
+        <h3 class="text-sm font-medium text-secondary">
+          <%= t("reports.summary.recurring_burn") %>
+        </h3>
+      </div>
+    </div>
+
+    <div class="space-y-2">
+      <p class="text-2xl font-semibold text-primary privacy-sensitive">
+        <%= metrics[:recurring_burn].format %>
+      </p>
+
+      <p class="text-sm text-subdued">
+        <%= t("reports.summary.last_three_complete_months") %>
+      </p>
+
+      <% if metrics[:recurring_burn_change] %>
+        <div class="flex items-center gap-1.5 privacy-sensitive">
+          <% if metrics[:recurring_burn_change] >= 0 %>
+            <%= icon("arrow-up", class: "w-4 h-4 text-destructive") %>
+            <span class="text-sm font-medium text-destructive">
+              +<%= metrics[:recurring_burn_change] %>%
+            </span>
+          <% else %>
+            <%= icon("arrow-down", class: "w-4 h-4 text-success") %>
+            <span class="text-sm font-medium text-success">
+              <%= metrics[:recurring_burn_change] %>%
+            </span>
+          <% end %>
+          <span class="text-sm text-subdued">
+            <%= t("reports.summary.vs_previous_three_months") %>
           </span>
         </div>
       <% end %>

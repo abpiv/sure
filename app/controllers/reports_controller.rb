@@ -282,6 +282,11 @@ class ReportsController < ApplicationController
       current_income = ensure_money(@current_income_totals.total)
       current_expenses = ensure_money(@current_expense_totals.total)
       net_savings = current_income - current_expenses
+      burn_rate = BurnRate.new(
+        Current.family,
+        user: Current.user,
+        income_statement: @income_statement
+      ).call
 
       previous_income = ensure_money(@previous_income_totals.total)
       previous_expenses = ensure_money(@previous_expense_totals.total)
@@ -298,6 +303,8 @@ class ReportsController < ApplicationController
         income_change: income_change,
         current_expenses: current_expenses,
         expense_change: expense_change,
+        recurring_burn: burn_rate.amount,
+        recurring_burn_change: burn_rate.change_percent,
         net_savings: net_savings,
         budget_percent: budget_percent
       }

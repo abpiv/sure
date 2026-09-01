@@ -112,6 +112,8 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     assert_select "h3", text: I18n.t("reports.summary.total_income")
     assert_select "h3", text: I18n.t("reports.summary.total_expenses")
     assert_select "h3", text: I18n.t("reports.summary.net_savings")
+    assert_select "h3", text: I18n.t("reports.summary.recurring_burn")
+    assert_select "p", text: I18n.t("reports.summary.last_three_complete_months")
   end
 
   test "index builds trends data" do
