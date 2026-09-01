@@ -37,6 +37,9 @@ en:
     summary:
       total_income: Total Income
       total_expenses: Total Expenses
+      recurring_burn: Recurring Gross Burn
+      last_three_complete_months: Average of last 3 complete months
+      vs_previous_three_months: vs previous 3 months
       net_savings: Net Savings
       budget_performance: Budget Performance
       vs_previous: vs previous period
