@@ -7,17 +7,32 @@
       <p class="text-secondary"><%= t("projections.show.subtitle") %></p>
     </div>
 
-    <div class="flex flex-wrap items-center gap-2">
-      <div class="inline-flex rounded-lg bg-container-inset p-1 shadow-border-xs" aria-label="<%= t("projections.show.history_label") %>">
-        <% Projections::Calculator::HISTORY_MONTH_OPTIONS.each do |months| %>
-          <%= link_to t("projections.show.history_months", count: months),
-                projections_path(history_months: months),
-                class: class_names(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                  months == @history_months ? "bg-container text-primary shadow-border-xs" : "text-secondary hover:text-primary"
-                ) %>
-        <% end %>
+    <div class="flex flex-wrap items-end gap-2">
+      <div class="space-y-1">
+        <span class="block text-xs font-medium text-secondary"><%= t("projections.show.history_label") %></span>
+        <div class="inline-flex rounded-lg bg-container-inset p-1 shadow-border-xs" aria-label="<%= t("projections.show.history_label") %>">
+          <% Projections::Calculator::HISTORY_MONTH_OPTIONS.each do |months| %>
+            <%= link_to t("projections.show.history_months", count: months),
+                  projections_path(history_months: months),
+                  class: class_names(
+                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    months == @history_months ? "bg-container text-primary shadow-border-xs" : "text-secondary hover:text-primary"
+                  ) %>
+          <% end %>
+        </div>
       </div>
+
+      <%= form_with url: projections_path, method: :get, class: "flex items-end gap-2" do |form| %>
+        <div class="space-y-1">
+          <%= form.label :history_months, t("projections.show.custom_months"), class: "block text-xs font-medium text-secondary" %>
+          <%= form.number_field :history_months,
+                value: @history_months,
+                min: 1,
+                step: 1,
+                class: "w-20 rounded-lg border border-secondary bg-container px-3 py-1.5 text-sm text-primary" %>
+        </div>
+        <%= form.submit t("projections.show.apply_lookback"), class: "rounded-lg border border-secondary bg-container px-3 py-1.5 text-sm font-medium text-primary hover:bg-container-inset" %>
+      <% end %>
 
       <%= render DS::Button.new(
         text: t("projections.show.export_pdf"),
@@ -37,7 +52,7 @@
     ) %>
   <% end %>
 
-  <% if @projection.recurring_enabled && @projection.burn_rate.zero? && @projection.recurring_revenue.zero? %>
+  <% if @projection.recurring_enabled && !@projection.recurring_items_present %>
     <%= render DS::Alert.new(
       title: t("projections.show.no_recurring_title"),
       message: t("projections.show.no_recurring_body"),
@@ -96,7 +111,7 @@
       data-controller="projection-chart"
       data-projection-chart-data-value="<%= @chart_points.to_json %>"
       data-projection-chart-metric-value="cash_balance"
-      data-projection-chart-type-value="line"
+      data-projection-chart-type-value="bar"
       data-projection-chart-currency-value="<%= @projection.currency %>"></div>
   </section>
 

@@ -74,6 +74,15 @@ class Projections::CalculatorTest < ActiveSupport::TestCase
   test "calculates liquid assets burn runway and the scheduled cash out date" do
     as_of = Date.new(2026, 8, 15)
     @cash_account.update!(balance: 2_500)
+    6.times do |index|
+      create_transaction(
+        account: @cash_account,
+        category: @expense_category,
+        date: Date.new(2026, index + 2, 10),
+        amount: 1_000,
+        name: "Operations"
+      )
+    end
     create_recurring(name: "Operating expenses", amount: 1_000, day: 10, next_date: Date.new(2026, 9, 10))
 
     result = Projections::Calculator.new(family: @family, user: @user, as_of: as_of).call
@@ -84,6 +93,77 @@ class Projections::CalculatorTest < ActiveSupport::TestCase
     assert_equal Money.new(1_000, @family.currency), result.net_burn
     assert_equal 2.5, result.runway_months
     assert_equal Date.new(2026, 11, 10), result.cash_out_date
+  end
+
+  test "calculates burn rate from average operating expenses in completed months" do
+    as_of = Date.new(2026, 8, 15)
+
+    [
+      [ Date.new(2026, 5, 10), 1_000 ],
+      [ Date.new(2026, 6, 10), 2_000 ],
+      [ Date.new(2026, 7, 10), 3_000 ]
+    ].each do |date, amount|
+      create_transaction(
+        account: @cash_account,
+        category: @expense_category,
+        date: date,
+        amount: amount,
+        name: "Operations"
+      )
+    end
+    create_recurring(name: "Future operating expense", amount: 9_000, day: 10, next_date: Date.new(2026, 9, 10))
+
+    result = Projections::Calculator.new(
+      family: @family,
+      user: @user,
+      as_of: as_of,
+      history_months: 3
+    ).call
+
+    assert_equal Money.new(2_000, @family.currency), result.burn_rate
+  end
+
+  test "supports a one-month completed lookback" do
+    as_of = Date.new(2026, 8, 15)
+    create_transaction(
+      account: @cash_account,
+      category: @expense_category,
+      date: Date.new(2026, 6, 10),
+      amount: 9_000,
+      name: "Earlier operations"
+    )
+    create_transaction(
+      account: @cash_account,
+      category: @expense_category,
+      date: Date.new(2026, 7, 10),
+      amount: 3_000,
+      name: "Latest operations"
+    )
+
+    result = Projections::Calculator.new(
+      family: @family,
+      user: @user,
+      as_of: as_of,
+      history_months: 1
+    ).call
+
+    assert_equal 1, result.actual_points.size
+    assert_equal Date.new(2026, 7, 31), result.actual_points.first.month
+    assert_equal Money.new(3_000, @family.currency), result.burn_rate
+  end
+
+  test "accepts a custom completed-month lookback" do
+    result = Projections::Calculator.new(
+      family: @family,
+      user: @user,
+      as_of: Date.new(2026, 8, 15),
+      history_months: 4
+    ).call
+
+    assert_equal 4, result.history_months
+    assert_equal 4, result.actual_points.size
+    assert_equal Date.new(2026, 4, 30), result.actual_points.first.month
+    assert_equal Date.new(2026, 7, 31), result.actual_points.last.month
   end
 
   test "uses the selected completed-month lookback to estimate recurring amounts" do
@@ -121,8 +201,8 @@ class Projections::CalculatorTest < ActiveSupport::TestCase
       history_months: 6
     ).call
 
-    assert_equal Money.new(600, @family.currency), three_month.burn_rate
-    assert_equal Money.new(350, @family.currency), six_month.burn_rate
+    assert_equal Money.new(600, @family.currency), three_month.projected_points.first.operating_expenses
+    assert_equal Money.new(350, @family.currency), six_month.projected_points.first.operating_expenses
   end
 
   test "excludes inactive recurring items and recurring transfers" do
@@ -148,11 +228,21 @@ class Projections::CalculatorTest < ActiveSupport::TestCase
 
     result = Projections::Calculator.new(family: @family, user: @user, as_of: as_of).call
 
-    assert_equal Money.new(500, @family.currency), result.burn_rate
+    assert result.recurring_items_present
+    assert_equal Money.new(500, @family.currency), result.projected_points.first.operating_expenses
   end
 
   test "does not project a runway or cash out date when recurring cash flow is nonnegative" do
     as_of = Date.new(2026, 8, 15)
+    6.times do |index|
+      create_transaction(
+        account: @cash_account,
+        category: @expense_category,
+        date: Date.new(2026, index + 2, 10),
+        amount: 1_000,
+        name: "Operations"
+      )
+    end
     create_recurring(name: "Revenue", amount: -2_000, day: 5, next_date: Date.new(2026, 9, 5))
     create_recurring(name: "Expenses", amount: 1_000, day: 10, next_date: Date.new(2026, 9, 10))
 

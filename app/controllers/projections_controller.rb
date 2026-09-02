@@ -37,7 +37,7 @@ class ProjectionsController < ApplicationController
 
     def normalized_history_months
       requested = params[:history_months].to_i
-      Projections::Calculator::HISTORY_MONTH_OPTIONS.include?(requested) ? requested : Projections::Calculator::DEFAULT_HISTORY_MONTHS
+      requested.positive? ? requested : Projections::Calculator::DEFAULT_HISTORY_MONTHS
     end
 
     def chart_points
