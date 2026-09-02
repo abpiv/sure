@@ -87,9 +87,9 @@
       </p>
     </div>
     <div class="rounded-xl bg-container p-5 shadow-border-xs">
-      <p class="text-sm text-secondary"><%= t("projections.show.metrics.cash_out_date") %></p>
+      <p class="text-sm text-secondary"><%= t("projections.show.metrics.out_of_money_date") %></p>
       <p class="mt-2 text-2xl font-semibold text-primary privacy-sensitive">
-        <%= @projection.cash_out_date ? l(@projection.cash_out_date, format: :long) : t("projections.show.metrics.cash_out_not_projected") %>
+        <%= @projection.out_of_money_date ? l(@projection.out_of_money_date, format: :long) : t("projections.show.metrics.out_of_money_not_projected") %>
       </p>
     </div>
   </section>
