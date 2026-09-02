@@ -1,7 +1,7 @@
 module Projections
   class Calculator
-    HISTORY_MONTH_OPTIONS = [ 3, 6 ].freeze
-    DEFAULT_HISTORY_MONTHS = 6
+    HISTORY_MONTH_OPTIONS = [ 1, 3, 6 ].freeze
+    DEFAULT_HISTORY_MONTHS = 1
     FORECAST_MONTHS = 6
     CASH_OUT_SEARCH_MONTHS = 120
 
@@ -19,6 +19,7 @@ module Projections
       :actual_points,
       :projected_points,
       :recurring_enabled,
+      :recurring_items_present,
       :warnings
     )
     Estimate = Data.define(:recurring_transaction, :monthly_amount)
@@ -35,7 +36,8 @@ module Projections
     def call
       estimates = recurring_estimates
       liquid_assets = current_liquid_assets
-      burn_rate = money(estimates.sum { |estimate| [ estimate.monthly_amount, 0 ].max })
+      actuals = actual_points
+      burn_rate = average_operating_expenses(actuals)
       recurring_revenue = money(estimates.sum { |estimate| [ -estimate.monthly_amount, 0 ].max })
       net_burn = burn_rate - recurring_revenue
 
@@ -49,9 +51,10 @@ module Projections
         net_burn: net_burn,
         runway_months: runway_months(liquid_assets, net_burn),
         cash_out_date: cash_out_date(liquid_assets, net_burn, estimates),
-        actual_points: actual_points,
+        actual_points: actuals,
         projected_points: projected_points(liquid_assets, estimates),
         recurring_enabled: !family.recurring_transactions_disabled?,
+        recurring_items_present: estimates.any?,
         warnings: warnings.uniq.freeze
       )
     end
@@ -61,7 +64,7 @@ module Projections
 
       def normalize_history_months(value)
         parsed = value.to_i
-        HISTORY_MONTH_OPTIONS.include?(parsed) ? parsed : DEFAULT_HISTORY_MONTHS
+        parsed.positive? ? parsed : DEFAULT_HISTORY_MONTHS
       end
 
       def money(amount)
@@ -137,6 +140,12 @@ module Projections
             net_income: revenue - expenses
           )
         end
+      end
+
+      def average_operating_expenses(points)
+        return money(0) if points.empty?
+
+        money(points.sum { |point| point.operating_expenses.amount } / points.size)
       end
 
       def month_ends

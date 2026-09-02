@@ -69,7 +69,7 @@ module Projections
           height: 155,
           title: "Cash balance over time",
           metric: :cash_balance,
-          type: :line
+          type: :bar
         )
 
         chart_width = (pdf.bounds.width - 20) / 3.0
@@ -90,7 +90,7 @@ module Projections
         end
 
         pdf.bounding_box([ 0, 58 ], width: pdf.bounds.width, height: 10) do
-          pdf.text "Actual: completed months  |  Projected: active recurring transactions  |  Forecast horizon: #{projection.forecast_months} months",
+          pdf.text "Lookback period: #{pluralize_months(projection.history_months)}  |  Actual: completed months  |  Projected: active recurring transactions  |  Forecast horizon: #{pluralize_months(projection.forecast_months)}",
             size: 7.5, color: COLORS[:secondary]
         end
       end
@@ -98,7 +98,7 @@ module Projections
       def metric_cards
         [
           { label: "Liquid assets", value: format_money(projection.liquid_assets), hint: "Accessible cash accounts" },
-          { label: "Monthly burn", value: format_money(projection.burn_rate), hint: "Recurring operating expenses" },
+          { label: "Monthly burn", value: format_money(projection.burn_rate), hint: "Average operating expenses" },
           { label: "Runway", value: format_runway, hint: "At projected net burn" },
           { label: "Projected cash-out", value: format_cash_out_date, hint: "From scheduled recurring activity" }
         ]
@@ -249,6 +249,10 @@ module Projections
 
       def chart_points
         @chart_points ||= projection.actual_points + projection.projected_points
+      end
+
+      def pluralize_months(count)
+        "#{count} #{count == 1 ? "month" : "months"}"
       end
 
       def chart_domain(metric)
