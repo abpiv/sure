@@ -514,6 +514,7 @@ GEM
     parser (3.3.10.2)
       ast (~> 2.4.1)
       racc
+    pdf-core (0.10.0)
     pdf-reader (2.15.1)
       Ascii85 (>= 1.0, < 3.0, != 2.0.0)
       afm (>= 0.2.1, < 2)
@@ -531,6 +532,10 @@ GEM
       concurrent-ruby (~> 1)
     pp (0.6.3)
       prettyprint
+    prawn (2.5.0)
+      matrix (~> 0.4)
+      pdf-core (~> 0.10.0)
+      ttfunk (~> 1.8)
     prettyprint (0.2.0)
     prism (1.4.0)
     propshaft (1.1.0)
@@ -926,6 +931,7 @@ DEPENDENCIES
   pg (~> 1.5)
   plaid
   posthog-ruby
+  prawn (~> 2.5)
   propshaft
   puma (>= 7.2.1)
   pundit

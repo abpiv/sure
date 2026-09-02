@@ -1,0 +1,33 @@
+---
+en:
+  projections:
+    show:
+      title: Projections
+      subtitle: Monthly cash outlook based on completed history and active recurring transactions.
+      export_pdf: Export three-statement PDF
+      history_label: History
+      history_months: "%{count} months"
+      forecast_label: Six-month forecast
+      actual: Actual
+      projected: Projected
+      recurring_setup: Manage recurring items
+      basis_note: Cash-basis management view. Forecasts are estimates, not audited financial statements.
+      recurring_disabled_title: Recurring transactions are disabled
+      recurring_disabled_body: Enable recurring transactions to calculate burn, runway, and future cash balances.
+      no_recurring_title: No recurring forecast items
+      no_recurring_body: Mark expected revenue and operating expenses as recurring to create the forward projection.
+      warnings_title: Some values could not be included
+      metrics:
+        liquid_assets: Liquid assets
+        burn_rate: Burn rate
+        burn_rate_hint: Recurring operating expenses per month
+        runway: Runway
+        runway_value: "%{count} months"
+        runway_not_projected: Not projected
+        cash_out_date: Projected cash-out date
+        cash_out_not_projected: Not projected
+      charts:
+        cash_balance: Cash balance over time
+        net_income: Net income over time
+        revenue: Revenue over time
+        operating_expenses: Operating expenses over time

@@ -1,0 +1,122 @@
+<%= content_for :page_title, t("projections.show.title") %>
+
+<div class="space-y-6" data-projections-history-months="<%= @history_months %>">
+  <header class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div class="space-y-1">
+      <h1 class="text-3xl font-medium text-primary"><%= t("projections.show.title") %></h1>
+      <p class="text-secondary"><%= t("projections.show.subtitle") %></p>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <div class="inline-flex rounded-lg bg-container-inset p-1 shadow-border-xs" aria-label="<%= t("projections.show.history_label") %>">
+        <% Projections::Calculator::HISTORY_MONTH_OPTIONS.each do |months| %>
+          <%= link_to t("projections.show.history_months", count: months),
+                projections_path(history_months: months),
+                class: class_names(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  months == @history_months ? "bg-container text-primary shadow-border-xs" : "text-secondary hover:text-primary"
+                ) %>
+        <% end %>
+      </div>
+
+      <%= render DS::Button.new(
+        text: t("projections.show.export_pdf"),
+        icon: "file-down",
+        variant: "outline",
+        href: pdf_projections_path(history_months: @history_months, format: :pdf),
+        method: :get
+      ) %>
+    </div>
+  </header>
+
+  <% unless @projection.recurring_enabled %>
+    <%= render DS::Alert.new(
+      title: t("projections.show.recurring_disabled_title"),
+      message: t("projections.show.recurring_disabled_body"),
+      variant: :warning
+    ) %>
+  <% end %>
+
+  <% if @projection.recurring_enabled && @projection.burn_rate.zero? && @projection.recurring_revenue.zero? %>
+    <%= render DS::Alert.new(
+      title: t("projections.show.no_recurring_title"),
+      message: t("projections.show.no_recurring_body"),
+      variant: :info
+    ) %>
+  <% end %>
+
+  <% if @projection.warnings.any? %>
+    <%= render DS::Alert.new(title: t("projections.show.warnings_title"), variant: :warning) do %>
+      <ul class="list-disc pl-5 text-sm">
+        <% @projection.warnings.each do |warning| %>
+          <li><%= warning %></li>
+        <% end %>
+      </ul>
+    <% end %>
+  <% end %>
+
+  <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="rounded-xl bg-container p-5 shadow-border-xs">
+      <p class="text-sm text-secondary"><%= t("projections.show.metrics.liquid_assets") %></p>
+      <p class="mt-2 text-2xl font-semibold text-primary privacy-sensitive"><%= @projection.liquid_assets.format %></p>
+    </div>
+    <div class="rounded-xl bg-container p-5 shadow-border-xs">
+      <p class="text-sm text-secondary"><%= t("projections.show.metrics.burn_rate") %></p>
+      <p class="mt-2 text-2xl font-semibold text-primary privacy-sensitive"><%= @projection.burn_rate.format %></p>
+      <p class="mt-1 text-xs text-subdued"><%= t("projections.show.metrics.burn_rate_hint") %></p>
+    </div>
+    <div class="rounded-xl bg-container p-5 shadow-border-xs">
+      <p class="text-sm text-secondary"><%= t("projections.show.metrics.runway") %></p>
+      <p class="mt-2 text-2xl font-semibold text-primary privacy-sensitive">
+        <%= @projection.runway_months ? t("projections.show.metrics.runway_value", count: @projection.runway_months) : t("projections.show.metrics.runway_not_projected") %>
+      </p>
+    </div>
+    <div class="rounded-xl bg-container p-5 shadow-border-xs">
+      <p class="text-sm text-secondary"><%= t("projections.show.metrics.cash_out_date") %></p>
+      <p class="mt-2 text-2xl font-semibold text-primary privacy-sensitive">
+        <%= @projection.cash_out_date ? l(@projection.cash_out_date, format: :long) : t("projections.show.metrics.cash_out_not_projected") %>
+      </p>
+    </div>
+  </section>
+
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div class="flex items-center gap-4 text-xs text-secondary">
+      <span class="flex items-center gap-1.5"><span class="size-2 rounded-full bg-subdued"></span><%= t("projections.show.actual") %></span>
+      <span class="flex items-center gap-1.5"><span class="size-2 rounded-full bg-link"></span><%= t("projections.show.projected") %></span>
+    </div>
+    <%= link_to t("projections.show.recurring_setup"), recurring_transactions_path, class: "text-sm font-medium text-link hover:underline" %>
+  </div>
+
+  <section class="rounded-xl bg-container p-5 shadow-border-xs">
+    <div class="mb-4 flex items-center justify-between gap-4">
+      <h2 class="text-lg font-medium text-primary"><%= t("projections.show.charts.cash_balance") %></h2>
+      <span class="text-xs text-secondary"><%= t("projections.show.forecast_label") %></span>
+    </div>
+    <div class="h-72 w-full privacy-sensitive"
+      data-controller="projection-chart"
+      data-projection-chart-data-value="<%= @chart_points.to_json %>"
+      data-projection-chart-metric-value="cash_balance"
+      data-projection-chart-type-value="line"
+      data-projection-chart-currency-value="<%= @projection.currency %>"></div>
+  </section>
+
+  <section class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+    <% [
+      [ "net_income", t("projections.show.charts.net_income") ],
+      [ "revenue", t("projections.show.charts.revenue") ],
+      [ "operating_expenses", t("projections.show.charts.operating_expenses") ]
+    ].each do |metric, title| %>
+      <div class="rounded-xl bg-container p-5 shadow-border-xs">
+        <h2 class="mb-4 text-lg font-medium text-primary"><%= title %></h2>
+        <div class="h-56 w-full privacy-sensitive"
+          data-controller="projection-chart"
+          data-projection-chart-data-value="<%= @chart_points.to_json %>"
+          data-projection-chart-metric-value="<%= metric %>"
+          data-projection-chart-type-value="bar"
+          data-projection-chart-currency-value="<%= @projection.currency %>"></div>
+      </div>
+    <% end %>
+  </section>
+
+  <p class="text-xs text-subdued"><%= t("projections.show.basis_note") %></p>
+</div>
