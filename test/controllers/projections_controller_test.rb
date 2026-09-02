@@ -15,8 +15,10 @@ class ProjectionsControllerTest < ActionDispatch::IntegrationTest
     assert_select "h2", text: I18n.t("projections.show.charts.net_income")
     assert_select "h2", text: I18n.t("projections.show.charts.revenue")
     assert_select "h2", text: I18n.t("projections.show.charts.operating_expenses")
+    assert_select "p", text: "Projected out-of-money date"
     assert_select "form[action=?][method='get']", pdf_projections_path(history_months: 3, format: :pdf)
     assert_select "button", text: I18n.t("projections.show.export_pdf")
+    assert_no_match(/cash-out/i, response.body)
   end
 
   test "show defaults to the last completed month" do
@@ -63,6 +65,9 @@ class ProjectionsControllerTest < ActionDispatch::IntegrationTest
     assert_includes text, "Balance Sheet"
     assert_includes text, "Cash Flow Statement"
     assert_includes text, "Cash-basis management report"
+    assert_includes text, "Projected out-of-money"
+    assert_includes text, "From projected net burn"
+    assert_no_match(/cash-out/i, text)
   end
 
   test "pdf applies and identifies the selected one-month lookback period" do

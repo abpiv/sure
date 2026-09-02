@@ -3,7 +3,7 @@ module Projections
     HISTORY_MONTH_OPTIONS = [ 1, 3, 6 ].freeze
     DEFAULT_HISTORY_MONTHS = 1
     FORECAST_MONTHS = 6
-    CASH_OUT_SEARCH_MONTHS = 120
+    FORECAST_DAYS_PER_MONTH = 30
 
     Point = Data.define(:month, :cash_balance, :revenue, :operating_expenses, :net_income)
     Result = Data.define(
@@ -15,7 +15,7 @@ module Projections
       :recurring_revenue,
       :net_burn,
       :runway_months,
-      :cash_out_date,
+      :out_of_money_date,
       :actual_points,
       :projected_points,
       :recurring_enabled,
@@ -23,7 +23,6 @@ module Projections
       :warnings
     )
     Estimate = Data.define(:recurring_transaction, :monthly_amount)
-    Event = Data.define(:date, :amount)
 
     def initialize(family:, user:, as_of: Date.current, history_months: DEFAULT_HISTORY_MONTHS)
       @family = family
@@ -34,11 +33,11 @@ module Projections
     end
 
     def call
-      estimates = recurring_estimates
+      revenue_estimates = recurring_revenue_estimates
       liquid_assets = current_liquid_assets
       actuals = actual_points
       burn_rate = average_operating_expenses(actuals)
-      recurring_revenue = money(estimates.sum { |estimate| [ -estimate.monthly_amount, 0 ].max })
+      recurring_revenue = money(revenue_estimates.sum { |estimate| [ -estimate.monthly_amount, 0 ].max })
       net_burn = burn_rate - recurring_revenue
 
       Result.new(
@@ -50,11 +49,11 @@ module Projections
         recurring_revenue: recurring_revenue,
         net_burn: net_burn,
         runway_months: runway_months(liquid_assets, net_burn),
-        cash_out_date: cash_out_date(liquid_assets, net_burn, estimates),
+        out_of_money_date: out_of_money_date(liquid_assets, net_burn),
         actual_points: actuals,
-        projected_points: projected_points(liquid_assets, estimates),
+        projected_points: projected_points(liquid_assets, burn_rate, recurring_revenue),
         recurring_enabled: !family.recurring_transactions_disabled?,
-        recurring_items_present: estimates.any?,
+        recurring_items_present: revenue_estimates.any?,
         warnings: warnings.uniq.freeze
       )
     end
@@ -154,7 +153,7 @@ module Projections
         end
       end
 
-      def recurring_estimates
+      def recurring_revenue_estimates
         return [] if family.recurring_transactions_disabled?
 
         eligible_account_ids = family.income_statement(user: user).eligible_accounts.pluck(:id).to_set
@@ -166,6 +165,7 @@ module Projections
           .filter_map do |recurring|
             next if recurring.transfer?
             next if recurring.account_id.present? && !eligible_account_ids.include?(recurring.account_id)
+            next unless recurring.amount.negative?
 
             Estimate.new(
               recurring_transaction: recurring,
@@ -195,22 +195,19 @@ module Projections
         ).amount
       end
 
-      def projected_points(liquid_assets, estimates)
-        events = events_between(estimates, as_of + 1.day, forecast_end)
+      def projected_points(liquid_assets, burn_rate, recurring_revenue)
         cash = liquid_assets
 
         forecast_month_ends.map do |month_end|
-          monthly_events = events.select { |event| event.date.year == month_end.year && event.date.month == month_end.month }
-          revenue = money(monthly_events.sum { |event| [ -event.amount, 0 ].max })
-          expenses = money(monthly_events.sum { |event| [ event.amount, 0 ].max })
-          monthly_events.each { |event| cash -= money(event.amount) }
+          net_income = recurring_revenue - burn_rate
+          cash += net_income
 
           Point.new(
             month: month_end,
             cash_balance: cash,
-            revenue: revenue,
-            operating_expenses: expenses,
-            net_income: revenue - expenses
+            revenue: recurring_revenue,
+            operating_expenses: burn_rate,
+            net_income: net_income
           )
         end
       end
@@ -221,50 +218,18 @@ module Projections
         end
       end
 
-      def forecast_end
-        forecast_month_ends.last
-      end
-
-      def events_between(estimates, start_date, end_date)
-        estimates.flat_map do |estimate|
-          recurring = estimate.recurring_transaction
-          date = next_event_date(recurring)
-          dates = []
-
-          while date <= end_date
-            dates << date if date >= start_date
-            date = recurring.calculate_next_expected_date(date)
-          end
-
-          dates.map { |event_date| Event.new(date: event_date, amount: estimate.monthly_amount) }
-        end.sort_by(&:date)
-      end
-
-      def next_event_date(recurring)
-        date = recurring.next_expected_date || recurring.calculate_next_expected_date(as_of)
-        date = recurring.calculate_next_expected_date(date) while date <= as_of
-        date
-      end
-
       def runway_months(liquid_assets, net_burn)
         return nil unless net_burn.positive?
 
         (liquid_assets / net_burn).round(1)
       end
 
-      def cash_out_date(liquid_assets, net_burn, estimates)
+      def out_of_money_date(liquid_assets, net_burn)
         return as_of unless liquid_assets.positive?
         return nil unless net_burn.positive?
 
-        search_end = as_of + CASH_OUT_SEARCH_MONTHS.months
-        cash = liquid_assets
-
-        events_between(estimates, as_of + 1.day, search_end).each do |event|
-          cash -= money(event.amount)
-          return event.date if cash.negative?
-        end
-
-        nil
+        days_until_depletion = (liquid_assets / net_burn * FORECAST_DAYS_PER_MONTH).ceil
+        as_of + days_until_depletion
       end
 
       def convert_money(value, date:, source:)

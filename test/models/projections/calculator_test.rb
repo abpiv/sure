@@ -23,6 +23,20 @@ class Projections::CalculatorTest < ActiveSupport::TestCase
 
     create_transaction(
       account: @cash_account,
+      category: @expense_category,
+      date: Date.new(2026, 5, 10),
+      amount: 1_000,
+      name: "Operations"
+    )
+    create_transaction(
+      account: @cash_account,
+      category: @expense_category,
+      date: Date.new(2026, 6, 10),
+      amount: 2_000,
+      name: "Operations"
+    )
+    create_transaction(
+      account: @cash_account,
       category: @revenue_category,
       date: Date.new(2026, 7, 5),
       amount: -4_000,
@@ -32,7 +46,7 @@ class Projections::CalculatorTest < ActiveSupport::TestCase
       account: @cash_account,
       category: @expense_category,
       date: Date.new(2026, 7, 10),
-      amount: 2_000,
+      amount: 3_000,
       name: "Operations"
     )
     create_transaction(
@@ -44,7 +58,7 @@ class Projections::CalculatorTest < ActiveSupport::TestCase
     )
 
     create_recurring(name: "Subscription revenue", amount: -3_000, day: 5, next_date: Date.new(2026, 9, 5))
-    create_recurring(name: "Operating expenses", amount: 4_000, day: 10, next_date: Date.new(2026, 9, 10))
+    create_recurring(name: "Scheduled expense adjustment", amount: 9_000, day: 10, next_date: Date.new(2026, 9, 10))
 
     result = Projections::Calculator.new(
       family: @family,
@@ -62,16 +76,18 @@ class Projections::CalculatorTest < ActiveSupport::TestCase
 
     july = result.actual_points.last
     assert_equal Money.new(4_000, @family.currency), july.revenue
-    assert_equal Money.new(2_000, @family.currency), july.operating_expenses
-    assert_equal Money.new(2_000, @family.currency), july.net_income
+    assert_equal Money.new(3_000, @family.currency), july.operating_expenses
+    assert_equal Money.new(1_000, @family.currency), july.net_income
 
     september = result.projected_points.first
     assert_equal Money.new(3_000, @family.currency), september.revenue
-    assert_equal Money.new(4_000, @family.currency), september.operating_expenses
-    assert_equal Money.new(-1_000, @family.currency), september.net_income
+    assert_equal Money.new(2_000, @family.currency), september.operating_expenses
+    assert_equal Money.new(1_000, @family.currency), september.net_income
+    assert_equal Money.new(13_000, @family.currency), september.cash_balance
+    assert_equal Money.new(14_000, @family.currency), result.projected_points.second.cash_balance
   end
 
-  test "calculates liquid assets burn runway and the scheduled cash out date" do
+  test "calculates liquid assets burn runway and the out-of-money date from the same net burn" do
     as_of = Date.new(2026, 8, 15)
     @cash_account.update!(balance: 2_500)
     6.times do |index|
@@ -92,7 +108,10 @@ class Projections::CalculatorTest < ActiveSupport::TestCase
     assert_equal Money.new(0, @family.currency), result.recurring_revenue
     assert_equal Money.new(1_000, @family.currency), result.net_burn
     assert_equal 2.5, result.runway_months
-    assert_equal Date.new(2026, 11, 10), result.cash_out_date
+    assert_equal Date.new(2026, 10, 29), result.out_of_money_date
+    assert_equal Money.new(1_500, @family.currency), result.projected_points.first.cash_balance
+    assert_equal Money.new(500, @family.currency), result.projected_points.second.cash_balance
+    assert_equal Money.new(-500, @family.currency), result.projected_points.third.cash_balance
   end
 
   test "calculates burn rate from average operating expenses in completed months" do
@@ -121,6 +140,7 @@ class Projections::CalculatorTest < ActiveSupport::TestCase
     ).call
 
     assert_equal Money.new(2_000, @family.currency), result.burn_rate
+    assert result.projected_points.all? { |point| point.operating_expenses == Money.new(2_000, @family.currency) }
   end
 
   test "supports a one-month completed lookback" do
@@ -150,6 +170,51 @@ class Projections::CalculatorTest < ActiveSupport::TestCase
     assert_equal 1, result.actual_points.size
     assert_equal Date.new(2026, 7, 31), result.actual_points.first.month
     assert_equal Money.new(3_000, @family.currency), result.burn_rate
+    assert_equal Money.new(3_000, @family.currency), result.projected_points.first.operating_expenses
+  end
+
+  test "changing the lookback changes expenses net income cash runway and out-of-money date together" do
+    as_of = Date.new(2026, 8, 15)
+    [
+      [ Date.new(2026, 5, 10), 3_000 ],
+      [ Date.new(2026, 6, 10), 3_000 ],
+      [ Date.new(2026, 7, 10), 9_000 ]
+    ].each do |date, amount|
+      create_transaction(
+        account: @cash_account,
+        category: @expense_category,
+        date: date,
+        amount: amount,
+        name: "Operations"
+      )
+    end
+    create_recurring(name: "Revenue", amount: -1_000, day: 5, next_date: Date.new(2026, 9, 5))
+    create_recurring(name: "Scheduled expense adjustment", amount: 50_000, day: 10, next_date: Date.new(2026, 9, 10))
+
+    one_month = Projections::Calculator.new(
+      family: @family,
+      user: @user,
+      as_of: as_of,
+      history_months: 1
+    ).call
+    three_month = Projections::Calculator.new(
+      family: @family,
+      user: @user,
+      as_of: as_of,
+      history_months: 3
+    ).call
+
+    assert_equal Money.new(9_000, @family.currency), one_month.projected_points.first.operating_expenses
+    assert_equal Money.new(-8_000, @family.currency), one_month.projected_points.first.net_income
+    assert_equal Money.new(4_000, @family.currency), one_month.projected_points.first.cash_balance
+    assert_equal 1.5, one_month.runway_months
+    assert_equal Date.new(2026, 9, 29), one_month.out_of_money_date
+
+    assert_equal Money.new(5_000, @family.currency), three_month.projected_points.first.operating_expenses
+    assert_equal Money.new(-4_000, @family.currency), three_month.projected_points.first.net_income
+    assert_equal Money.new(8_000, @family.currency), three_month.projected_points.first.cash_balance
+    assert_equal 3.0, three_month.runway_months
+    assert_equal Date.new(2026, 11, 13), three_month.out_of_money_date
   end
 
   test "accepts a custom completed-month lookback" do
@@ -166,22 +231,22 @@ class Projections::CalculatorTest < ActiveSupport::TestCase
     assert_equal Date.new(2026, 7, 31), result.actual_points.last.month
   end
 
-  test "uses the selected completed-month lookback to estimate recurring amounts" do
+  test "uses the selected completed-month lookback to estimate recurring revenue" do
     as_of = Date.new(2026, 8, 15)
     recurring = create_recurring(
-      name: "Variable hosting",
-      amount: 600,
+      name: "Variable revenue",
+      amount: -600,
       day: 10,
       next_date: Date.new(2026, 9, 10),
-      expected_min: 100,
-      expected_max: 900
+      expected_min: -900,
+      expected_max: -100
     )
 
-    [ 100, 100, 100, 300, 600, 900 ].each_with_index do |amount, index|
+    [ -100, -100, -100, -300, -600, -900 ].each_with_index do |amount, index|
       month = Date.new(2026, 2 + index, 10)
       create_transaction(
         account: @cash_account,
-        category: @expense_category,
+        category: @revenue_category,
         date: month,
         amount: amount,
         name: recurring.name
@@ -201,8 +266,8 @@ class Projections::CalculatorTest < ActiveSupport::TestCase
       history_months: 6
     ).call
 
-    assert_equal Money.new(600, @family.currency), three_month.projected_points.first.operating_expenses
-    assert_equal Money.new(350, @family.currency), six_month.projected_points.first.operating_expenses
+    assert_equal Money.new(600, @family.currency), three_month.projected_points.first.revenue
+    assert_equal Money.new(350, @family.currency), six_month.projected_points.first.revenue
   end
 
   test "excludes inactive recurring items and recurring transfers" do
@@ -216,8 +281,8 @@ class Projections::CalculatorTest < ActiveSupport::TestCase
       status: "active"
     )
 
-    create_recurring(name: "Active expense", amount: 500, day: 10, next_date: Date.new(2026, 9, 10))
-    create_recurring(name: "Inactive expense", amount: 800, day: 11, next_date: Date.new(2026, 9, 11), status: "inactive")
+    create_recurring(name: "Active revenue", amount: -500, day: 10, next_date: Date.new(2026, 9, 10))
+    create_recurring(name: "Inactive revenue", amount: -800, day: 11, next_date: Date.new(2026, 9, 11), status: "inactive")
     create_recurring(
       name: "Savings transfer",
       amount: 2_000,
@@ -229,10 +294,30 @@ class Projections::CalculatorTest < ActiveSupport::TestCase
     result = Projections::Calculator.new(family: @family, user: @user, as_of: as_of).call
 
     assert result.recurring_items_present
-    assert_equal Money.new(500, @family.currency), result.projected_points.first.operating_expenses
+    assert_equal Money.new(500, @family.currency), result.recurring_revenue
+    assert_equal Money.new(500, @family.currency), result.projected_points.first.revenue
+    assert_equal Money.new(0, @family.currency), result.projected_points.first.operating_expenses
   end
 
-  test "does not project a runway or cash out date when recurring cash flow is nonnegative" do
+  test "does not treat recurring expenses as forward forecast items" do
+    as_of = Date.new(2026, 8, 15)
+    create_transaction(
+      account: @cash_account,
+      category: @expense_category,
+      date: Date.new(2026, 7, 10),
+      amount: 1_000,
+      name: "Operations"
+    )
+    create_recurring(name: "Scheduled expense adjustment", amount: 5_000, day: 10, next_date: Date.new(2026, 9, 10))
+
+    result = Projections::Calculator.new(family: @family, user: @user, as_of: as_of).call
+
+    refute result.recurring_items_present
+    assert_equal Money.new(0, @family.currency), result.recurring_revenue
+    assert result.projected_points.all? { |point| point.operating_expenses == Money.new(1_000, @family.currency) }
+  end
+
+  test "does not project a runway or out-of-money date when recurring cash flow is nonnegative" do
     as_of = Date.new(2026, 8, 15)
     6.times do |index|
       create_transaction(
@@ -250,7 +335,7 @@ class Projections::CalculatorTest < ActiveSupport::TestCase
 
     assert_equal Money.new(-1_000, @family.currency), result.net_burn
     assert_nil result.runway_months
-    assert_nil result.cash_out_date
+    assert_nil result.out_of_money_date
   end
 
   private

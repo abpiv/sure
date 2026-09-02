@@ -90,7 +90,7 @@ module Projections
         end
 
         pdf.bounding_box([ 0, 58 ], width: pdf.bounds.width, height: 10) do
-          pdf.text "Lookback period: #{pluralize_months(projection.history_months)}  |  Actual: completed months  |  Projected: active recurring transactions  |  Forecast horizon: #{pluralize_months(projection.forecast_months)}",
+          pdf.text "Lookback period: #{pluralize_months(projection.history_months)}  |  Actual: completed months  |  Projected: recurring revenue and lookback-average expenses  |  Forecast horizon: #{pluralize_months(projection.forecast_months)}",
             size: 7.5, color: COLORS[:secondary]
         end
       end
@@ -98,9 +98,9 @@ module Projections
       def metric_cards
         [
           { label: "Liquid assets", value: format_money(projection.liquid_assets), hint: "Accessible cash accounts" },
-          { label: "Monthly burn", value: format_money(projection.burn_rate), hint: "Average operating expenses" },
+          { label: "Monthly burn", value: format_money(projection.burn_rate), hint: "Lookback-average operating expenses" },
           { label: "Runway", value: format_runway, hint: "At projected net burn" },
-          { label: "Projected cash-out", value: format_cash_out_date, hint: "From scheduled recurring activity" }
+          { label: "Projected out-of-money", value: format_out_of_money_date, hint: "From projected net burn" }
         ]
       end
 
@@ -474,8 +474,8 @@ module Projections
         projection.runway_months ? "#{projection.runway_months} months" : "Not projected"
       end
 
-      def format_cash_out_date
-        projection.cash_out_date ? projection.cash_out_date.strftime("%b %-d, %Y") : "Not projected"
+      def format_out_of_money_date
+        projection.out_of_money_date ? projection.out_of_money_date.strftime("%b %-d, %Y") : "Not projected"
       end
 
       def format_date(date)
