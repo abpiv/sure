@@ -89,6 +89,7 @@ gem "webauthn", "~> 3.4"
 gem "activerecord-import"
 gem "rubyzip", "~> 2.3"
 gem "pdf-reader", "~> 2.12"
+gem "prawn", "~> 2.5"
 
 # OpenID Connect, OAuth & SAML authentication
 gem "omniauth", "~> 2.1"

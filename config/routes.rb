@@ -406,6 +406,10 @@ Rails.application.routes.draw do
     get :picker, on: :collection
   end
 
+  resource :projections, only: :show do
+    get :pdf, on: :collection
+  end
+
   # Hub page fronting budgets + goals under a single "Plan" nav entry.
   resource :plan, only: :show
 
