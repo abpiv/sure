@@ -316,6 +316,7 @@ class McpControllerTest < ActionDispatch::IntegrationTest
       assert_includes tool_names, "get_holdings"
       assert_includes tool_names, "get_balance_sheet"
       assert_includes tool_names, "get_income_statement"
+      assert_includes tool_names, "export_projections_report"
       assert_includes tool_names, "update_transaction"
       assert_includes tool_names, "update_budget"
 
@@ -416,6 +417,39 @@ class McpControllerTest < ActionDispatch::IntegrationTest
   end
 
   # -- tools/call --
+
+  test "tools/call exports a PDF through authenticated MCP" do
+    with_mcp_env do
+      travel_to Date.new(2026, 9, 1) do
+        post "/mcp", params: jsonrpc_request("tools/call", {
+          name: "export_projections_report", arguments: { history_months: 1 }
+        }).to_json, headers: mcp_headers(@token)
+
+        assert_response :ok
+        result = JSON.parse(response.body).fetch("result")
+        refute result["isError"]
+        report = JSON.parse(result.fetch("content").first.fetch("text"))
+        assert_equal "2026-08-01", report["period_start"]
+        assert Base64.strict_decode64(report.fetch("content_base64")).start_with?("%PDF-")
+      end
+    end
+  end
+
+  test "PDF export rejects missing authentication and invalid parameters" do
+    Projections::Calculator.expects(:new).never
+    post "/mcp", params: jsonrpc_request("tools/call", {
+      name: "export_projections_report", arguments: {}
+    }).to_json, headers: { "Content-Type" => "application/json" }
+    assert_response :unauthorized
+
+    with_mcp_env do
+      post "/mcp", params: jsonrpc_request("tools/call", {
+        name: "export_projections_report", arguments: { history_months: 0 }
+      }).to_json, headers: mcp_headers(@token)
+      assert_response :ok
+      assert JSON.parse(response.body).fetch("result").fetch("isError")
+    end
+  end
 
   test "tools/call rejects a preview tool for a user without preview features" do
     @user.update!(preferences: (@user.preferences || {}).merge("preview_features_enabled" => false))
